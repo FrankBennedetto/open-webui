@@ -42,6 +42,7 @@
 	import Name from './Name.svelte';
 	import ProfileImage from './ProfileImage.svelte';
 	import Image from '$lib/components/common/Image.svelte';
+	import ChatVideo from '$lib/components/chat/common/ChatVideo.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import RateComment from './RateComment.svelte';
 	import WebSearchResults from './ResponseMessage/WebSearchResults.svelte';
@@ -697,7 +698,7 @@
 										{#if file.type === 'image' || (file?.content_type ?? '').startsWith('image/')}
 											<Image src={file.url} alt={file.name || $i18n.t('Generated Image')} />
 										{:else if file.type === 'video' || (file?.content_type ?? '').startsWith('video/')}
-											<video src={file.url} controls class=" max-h-96 rounded-lg"></video>
+											<ChatVideo file={file} className=" max-h-96 rounded-lg" />
 										{:else}
 											<FileItem
 												item={file}
