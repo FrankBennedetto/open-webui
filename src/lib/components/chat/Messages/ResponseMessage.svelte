@@ -687,15 +687,17 @@
 							<StatusHistory statusHistory={message?.statusHistory} />
 						{/if}
 
-						{#if message?.files && message.files?.filter( (f) => ['image', 'file'].includes(f.type) ).length > 0}
+						{#if message?.files && message.files?.filter( (f) => ['image', 'video', 'file'].includes(f.type) ).length > 0}
 							<div
 								class="my-1 w-full flex overflow-x-auto gap-2 flex-wrap"
 								dir={$settings?.chatDirection ?? 'auto'}
 							>
-								{#each message.files.filter((f) => ['image', 'file'].includes(f.type)) as file}
+								{#each message.files.filter((f) => ['image', 'video', 'file'].includes(f.type)) as file}
 									<div>
 										{#if file.type === 'image' || (file?.content_type ?? '').startsWith('image/')}
 											<Image src={file.url} alt={file.name || $i18n.t('Generated Image')} />
+										{:else if file.type === 'video' || (file?.content_type ?? '').startsWith('video/')}
+											<video src={file.url} controls class=" max-h-96 rounded-lg"></video>
 										{:else}
 											<FileItem
 												item={file}
