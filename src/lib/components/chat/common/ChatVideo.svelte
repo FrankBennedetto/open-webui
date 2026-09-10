@@ -11,10 +11,27 @@
 	/** Prefer metadata for compose thumbs; auto for in-bubble playback */
 	export let preload: 'none' | 'metadata' | 'auto' = 'metadata';
 
-	$: src =
-		file?.url?.startsWith('data') || file?.url?.startsWith('http')
-			? file.url
-			: `${WEBUI_API_BASE_URL}/files/${file.url}${file?.content_type ? '/content' : ''}`;
+	/**
+	 * Resolve a playable src once:
+	 * - data:/http(s): absolute URLs → as-is
+	 * - paths starting with `/` or already containing `/files/` → as-is (avoid double-wrap)
+	 * - bare file ids → `${WEBUI_API_BASE_URL}/files/{id}/content` when content_type is set
+	 */
+	function resolveSrc(url?: string, content_type?: string): string {
+		if (!url) return '';
+		if (
+			url.startsWith('data:') ||
+			url.startsWith('http://') ||
+			url.startsWith('https://') ||
+			url.startsWith('/') ||
+			url.includes('/files/')
+		) {
+			return url;
+		}
+		return `${WEBUI_API_BASE_URL}/files/${url}${content_type ? '/content' : ''}`;
+	}
+
+	$: src = resolveSrc(file?.url, file?.content_type);
 </script>
 
 <video
