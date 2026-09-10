@@ -3489,12 +3489,15 @@
 					const imageFiles = (message?.files ?? []).filter(
 						(file) => file.type === 'image' || (file?.content_type ?? '').startsWith('image/')
 					);
+					const videoFiles = (message?.files ?? []).filter(
+						(file) => file.type === 'video' || (file?.content_type ?? '').startsWith('video/')
+					);
 
 					if (message.output && message.role === 'assistant') {
 						return { role: message.role, model: message.model, output: message.output };
 					}
 
-					if (message.role === 'user' && imageFiles.length > 0) {
+					if (message.role === 'user' && (imageFiles.length > 0 || videoFiles.length > 0)) {
 						return {
 							role: message.role,
 							content: [
@@ -3505,6 +3508,12 @@
 								...imageFiles.map((file) => ({
 									type: 'image_url',
 									image_url: {
+										url: file.url
+									}
+								})),
+								...videoFiles.map((file) => ({
+									type: 'video_url',
+									video_url: {
 										url: file.url
 									}
 								}))
