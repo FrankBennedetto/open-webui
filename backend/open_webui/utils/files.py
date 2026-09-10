@@ -198,6 +198,34 @@ async def get_file_url_from_base64(request, base64_file_string, metadata, user):
     return None
 
 
+
+# Match /api/v1/files/{id}/content with optional repeated /content and query/fragment.
+_FILES_CONTENT_PATH_RE = re.compile(
+    r'(?:(?:https?://[^/]+)?/api/v1/files/|/files/)(?P<id>[^/?#]+)/content(?:/content)*(?:[?#].*)?$',
+    re.IGNORECASE,
+)
+
+
+def extract_file_id_from_media_url(url: str) -> Optional[str]:
+    """Return a bare file id from relative or absolute Open WebUI file content URLs.
+
+    Chat often sends `/api/v1/files/{id}/content` (sometimes doubled `/content/content`).
+    Those must not be forwarded to Spark as video_url — resolve to the file id first.
+    """
+    if not url or not isinstance(url, str):
+        return None
+    value = url.strip()
+    if not value or value.startswith('data:'):
+        return None
+    match = _FILES_CONTENT_PATH_RE.search(value)
+    if match:
+        return match.group('id')
+    # Already a bare id (no slashes)
+    if '/' not in value and '\\' not in value:
+        return value
+    return None
+
+
 class VideoFileTooLargeError(Exception):
     """Raised when a video exceeds the hard base64-inline size cap."""
 
@@ -269,6 +297,19 @@ async def get_video_base64_from_url(url: str, user=None) -> Optional[str]:
                 raise VideoFileTooLargeError(approx_bytes, VIDEO_BASE64_MAX_BYTES)
             return url
 
+        # Relative/absolute OWUI file content paths → bare file id (never forward to Spark).
+        file_id = extract_file_id_from_media_url(url)
+        if file_id and (
+            url.startswith('/')
+            or '/api/v1/files/' in url
+            or '/files/' in url
+            or (file_id == url.strip())
+        ):
+            # Prefer file-id resolution for OWUI paths and bare ids.
+            # Absolute http(s) that are NOT our files API still fall through below.
+            if not url.startswith('http') or '/api/v1/files/' in url or '/files/' in url:
+                return await get_video_base64_from_file_id(file_id, user=user)
+
         if url.startswith('http'):
             await asyncio.to_thread(validate_url, url)
             async with get_ssrf_safe_session() as session:
@@ -289,6 +330,9 @@ async def get_video_base64_from_url(url: str, user=None) -> Optional[str]:
                         content_type = 'video/mp4'
                     return f'data:{content_type};base64,{encoded_string}'
 
+        # Last resort: treat as bare file id
+        if file_id:
+            return await get_video_base64_from_file_id(file_id, user=user)
         return await get_video_base64_from_file_id(url, user=user)
     except VideoFileTooLargeError:
         raise
