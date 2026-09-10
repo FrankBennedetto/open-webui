@@ -1,4 +1,5 @@
 import asyncio
+import os
 import base64
 import io
 import mimetypes
@@ -195,6 +196,104 @@ async def get_file_url_from_base64(request, base64_file_string, metadata, user):
     elif 'data:audio/wav;base64' in base64_file_string:
         return await get_audio_url_from_base64(request, base64_file_string, metadata, user)
     return None
+
+
+class VideoFileTooLargeError(Exception):
+    """Raised when a video exceeds the hard base64-inline size cap."""
+
+    def __init__(self, size_bytes: int, max_bytes: int, name: str = ''):
+        self.size_bytes = size_bytes
+        self.max_bytes = max_bytes
+        self.name = name
+        label = f' "{name}"' if name else ''
+        super().__init__(
+            f'Video{label} is too large to send to the model '
+            f'({size_bytes} bytes; max {max_bytes} bytes). '
+            f'Reduce the file size or raise VIDEO_BASE64_MAX_MB.'
+        )
+
+
+# Hard cap for inlining videos as data URLs (prevents OOM). Default 50 MiB.
+try:
+    _VIDEO_BASE64_MAX_MB = int(os.getenv('VIDEO_BASE64_MAX_MB', '50') or '50')
+except (TypeError, ValueError):
+    _VIDEO_BASE64_MAX_MB = 50
+VIDEO_BASE64_MAX_BYTES = max(1, _VIDEO_BASE64_MAX_MB) * 1024 * 1024
+
+
+async def get_video_base64_from_file_id(id: str, user=None) -> Optional[str]:
+    """Resolve a stored file id to a data:video/...;base64 URL with a hard size cap."""
+    file = await Files.get_file_by_id(id)
+    if not file:
+        return None
+
+    if user is None:
+        return None
+    if file.user_id != user.id and user.role != 'admin' and not await has_access_to_file(file.id, 'read', user):
+        return None
+
+    try:
+        file_path = await asyncio.to_thread(Storage.get_file, file.path)
+        file_path = Path(file_path)
+        if not file_path.is_file():
+            return None
+
+        size_bytes = file_path.stat().st_size
+        if size_bytes > VIDEO_BASE64_MAX_BYTES:
+            raise VideoFileTooLargeError(size_bytes, VIDEO_BASE64_MAX_BYTES, getattr(file, 'filename', '') or id)
+
+        async with aiofiles.open(file_path, 'rb') as video_file:
+            encoded_string = base64.b64encode(await video_file.read()).decode('utf-8')
+        content_type = mimetypes.guess_type(file_path.name)[0] or (file.meta or {}).get('content_type') or 'video/mp4'
+        if not str(content_type).startswith('video/'):
+            content_type = 'video/mp4'
+        return f'data:{content_type};base64,{encoded_string}'
+    except VideoFileTooLargeError:
+        raise
+    except Exception:
+        return None
+
+
+async def get_video_base64_from_url(url: str, user=None) -> Optional[str]:
+    """Resolve http(s) or file-id video_url values to data:video/...;base64."""
+    try:
+        if url.startswith('data:video/'):
+            # Enforce size on already-inlined data URLs (base64 expands ~4/3).
+            try:
+                header, b64_data = url.split(',', 1)
+            except ValueError:
+                return None
+            # Approximate decoded size without fully decoding twice.
+            approx_bytes = (len(b64_data) * 3) // 4
+            if approx_bytes > VIDEO_BASE64_MAX_BYTES:
+                raise VideoFileTooLargeError(approx_bytes, VIDEO_BASE64_MAX_BYTES)
+            return url
+
+        if url.startswith('http'):
+            await asyncio.to_thread(validate_url, url)
+            async with get_ssrf_safe_session() as session:
+                async with session.get(
+                    url, ssl=AIOHTTP_CLIENT_SESSION_SSL, allow_redirects=AIOHTTP_CLIENT_ALLOW_REDIRECTS
+                ) as response:
+                    response.raise_for_status()
+                    video_data = bytearray()
+                    total = 0
+                    async for chunk in response.content.iter_chunked(64 * 1024):
+                        total += len(chunk)
+                        if total > VIDEO_BASE64_MAX_BYTES:
+                            raise VideoFileTooLargeError(total, VIDEO_BASE64_MAX_BYTES)
+                        video_data.extend(chunk)
+                    encoded_string = base64.b64encode(video_data).decode('utf-8')
+                    content_type = response.headers.get('Content-Type', 'video/mp4')
+                    if not str(content_type).startswith('video/'):
+                        content_type = 'video/mp4'
+                    return f'data:{content_type};base64,{encoded_string}'
+
+        return await get_video_base64_from_file_id(url, user=user)
+    except VideoFileTooLargeError:
+        raise
+    except Exception:
+        return None
 
 
 async def get_image_base64_from_file_id(id: str, user=None) -> Optional[str]:

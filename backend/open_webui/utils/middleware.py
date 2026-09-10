@@ -87,10 +87,12 @@ from open_webui.utils.chat_id import is_saved_chat_id
 from open_webui.utils.code_interpreter import execute_code_jupyter
 from open_webui.utils.context_compaction import compact_messages_for_request
 from open_webui.utils.files import (
+    VideoFileTooLargeError,
     convert_markdown_base64_images,
     get_file_url_from_base64,
     get_image_base64_from_url,
     get_image_url_from_base64,
+    get_video_base64_from_url,
 )
 from open_webui.utils.filter import (
     FilterContext,
@@ -2156,6 +2158,71 @@ async def convert_url_images_to_base64(form_data, user=None):
     return form_data
 
 
+async def convert_url_videos_to_base64(form_data, user=None):
+    """Resolve video_url parts (file ids / http URLs) to data:video/...;base64.
+
+    Oversized videos raise HTTPException with a clear message instead of OOMing.
+    """
+    messages = form_data.get('messages', [])
+
+    for message in messages:
+        content = message.get('content')
+        if not isinstance(content, list):
+            continue
+
+        new_content = []
+
+        for item in content:
+            if not isinstance(item, dict) or item.get('type') != 'video_url':
+                new_content.append(item)
+                continue
+
+            video_url_data = item.get('video_url', {})
+            if isinstance(video_url_data, dict):
+                video_url = video_url_data.get('url') or ''
+            elif isinstance(video_url_data, str):
+                video_url = video_url_data
+            else:
+                video_url = ''
+
+            if not video_url:
+                new_content.append(item)
+                continue
+
+            if video_url.startswith('data:video/'):
+                # Still enforce size cap on already-inlined payloads.
+                try:
+                    base64_data = await get_video_base64_from_url(video_url, user=user)
+                    if base64_data:
+                        new_content.append({'type': 'video_url', 'video_url': {'url': base64_data}})
+                    else:
+                        new_content.append(item)
+                except VideoFileTooLargeError as e:
+                    raise HTTPException(status_code=400, detail=str(e)) from e
+                continue
+
+            try:
+                base64_data = await get_video_base64_from_url(video_url, user=user)
+                if base64_data:
+                    new_content.append(
+                        {
+                            'type': 'video_url',
+                            'video_url': {'url': base64_data},
+                        }
+                    )
+                else:
+                    new_content.append(item)
+            except VideoFileTooLargeError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+            except Exception as e:
+                log.debug('Error converting video URL to base64: %s', e)
+                new_content.append(item)
+
+        message['content'] = new_content
+
+    return form_data
+
+
 MESSAGE_REPLAY_KEYS = ('id', 'role', 'content', 'output', 'files', 'contextSummary', 'usage', 'model')
 
 
@@ -2428,26 +2495,23 @@ async def process_chat_payload(request, form_data, user, metadata, model):
             system_message = get_system_message(form_data.get('messages', []))
             form_data['messages'] = [system_message, *db_messages] if system_message else db_messages
 
-            # Inject image files into content as image_url parts (mirrors frontend logic)
+            # Inject image/video files into content as multimodal parts (mirrors frontend logic)
             for message in form_data['messages']:
-                image_files = [
-                    f
-                    for f in message.get('files', [])
-                    if f.get('type') == 'image' or (f.get('content_type') or '').startswith('image/')
-                ]
-                if message.get('role') == 'user' and image_files:
+                media_parts = []
+                for f in message.get('files', []):
+                    if not f.get('url'):
+                        continue
+                    content_type = f.get('content_type') or ''
+                    if f.get('type') == 'image' or content_type.startswith('image/'):
+                        media_parts.append({'type': 'image_url', 'image_url': {'url': f['url']}})
+                    elif f.get('type') == 'video' or content_type.startswith('video/'):
+                        media_parts.append({'type': 'video_url', 'video_url': {'url': f['url']}})
+                if message.get('role') == 'user' and media_parts:
                     text_content = message.get('content', '')
                     if isinstance(text_content, str):
                         message['content'] = [
                             {'type': 'text', 'text': text_content},
-                            *[
-                                {
-                                    'type': 'image_url',
-                                    'image_url': {'url': f['url']},
-                                }
-                                for f in image_files
-                                if f.get('url')
-                            ],
+                            *media_parts,
                         ]
                 # Strip files field — it's been incorporated into content
                 message.pop('files', None)
