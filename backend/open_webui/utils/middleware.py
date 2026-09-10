@@ -2574,6 +2574,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
             pass
 
     form_data = await convert_url_images_to_base64(form_data, user=user)
+    form_data = await convert_url_videos_to_base64(form_data, user=user)
 
     event_emitter = await get_event_emitter(metadata)
     event_caller = await get_event_call(metadata)
