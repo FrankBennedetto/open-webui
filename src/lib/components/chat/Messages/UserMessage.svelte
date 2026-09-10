@@ -18,6 +18,7 @@
 	import FileItem from '$lib/components/common/FileItem.svelte';
 	import Markdown from './Markdown.svelte';
 	import Image from '$lib/components/common/Image.svelte';
+	import ChatVideo from '$lib/components/chat/common/ChatVideo.svelte';
 	import DeleteConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import SubagentResultRow from './SubagentResultRow.svelte';
 
@@ -186,7 +187,7 @@
 								{#if file.type === 'image' || (file?.content_type ?? '').startsWith('image/')}
 									<Image src={fileUrl} imageClassName=" max-h-96 rounded-lg" />
 								{:else if file.type === 'video' || (file?.content_type ?? '').startsWith('video/')}
-									<video src={fileUrl} controls class=" max-h-96 rounded-lg"></video>
+									<ChatVideo file={{ ...file, url: fileUrl }} className=" max-h-96 rounded-lg" />
 								{:else}
 									<FileItem
 										item={file}
@@ -260,11 +261,11 @@
 											: `${WEBUI_API_BASE_URL}/files/${file.url}${file?.content_type ? '/content' : ''}`}
 									<div class=" relative group">
 										<div class="relative flex items-center">
-											<video
-												src={fileUrl}
-												controls
-												class=" size-14 rounded-xl object-cover"
-											></video>
+											<ChatVideo
+												file={{ ...file, url: fileUrl }}
+												className=" size-14 rounded-xl object-cover"
+												preload="metadata"
+											/>
 										</div>
 										<div class=" absolute -top-1 -right-1">
 											<button
