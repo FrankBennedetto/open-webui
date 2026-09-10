@@ -698,11 +698,7 @@
 										{#if file.type === 'image' || (file?.content_type ?? '').startsWith('image/')}
 											<Image src={file.url} alt={file.name || $i18n.t('Generated Image')} />
 										{:else if file.type === 'video' || (file?.content_type ?? '').startsWith('video/')}
-											{@const fileUrl =
-												file.url?.startsWith('data') || file.url?.startsWith('http')
-													? file.url
-													: `${WEBUI_API_BASE_URL}/files/${file.url}${file?.content_type ? '/content' : ''}`}
-											<ChatVideo file={{ ...file, url: fileUrl }} className=" max-h-96 rounded-lg" />
+											<ChatVideo file={file} className=" max-h-96 rounded-lg" />
 										{:else}
 											<FileItem
 												item={file}

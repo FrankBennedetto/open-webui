@@ -187,7 +187,7 @@
 								{#if file.type === 'image' || (file?.content_type ?? '').startsWith('image/')}
 									<Image src={fileUrl} imageClassName=" max-h-96 rounded-lg" />
 								{:else if file.type === 'video' || (file?.content_type ?? '').startsWith('video/')}
-									<ChatVideo file={{ ...file, url: fileUrl }} className=" max-h-96 rounded-lg" />
+									<ChatVideo file={file} className=" max-h-96 rounded-lg" />
 								{:else}
 									<FileItem
 										item={file}
@@ -255,14 +255,10 @@
 										</div>
 									</div>
 								{:else if file.type === 'video' || (file?.content_type ?? '').startsWith('video/')}
-									{@const fileUrl =
-										file.url?.startsWith('data') || file.url?.startsWith('http')
-											? file.url
-											: `${WEBUI_API_BASE_URL}/files/${file.url}${file?.content_type ? '/content' : ''}`}
 									<div class=" relative group">
 										<div class="relative flex items-center">
 											<ChatVideo
-												file={{ ...file, url: fileUrl }}
+												file={file}
 												className=" size-14 rounded-xl object-cover"
 												preload="metadata"
 											/>

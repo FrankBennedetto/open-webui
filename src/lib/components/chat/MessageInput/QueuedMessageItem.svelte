@@ -48,15 +48,11 @@
 							{/if}
 						</div>
 					{:else if file.type === 'video' || (file?.content_type ?? '').startsWith('video/')}
-						{@const fileUrl =
-							file.url?.startsWith('data') || file.url?.startsWith('http')
-								? file.url
-								: `${WEBUI_API_BASE_URL}/files/${file.url}${file?.content_type ? '/content' : ''}`}
 						<div
 							class="relative size-6 shrink-0 overflow-hidden rounded-lg border border-gray-100/60 bg-white/60 dark:border-white/[0.06] dark:bg-white/[0.025]"
 						>
 							<ChatVideo
-								file={{ ...file, url: fileUrl }}
+								file={file}
 								className="size-full object-cover"
 								preload="metadata"
 							/>
