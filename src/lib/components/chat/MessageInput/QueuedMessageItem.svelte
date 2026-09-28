@@ -2,6 +2,7 @@
 	import { getContext } from 'svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import Image from '$lib/components/common/Image.svelte';
+	import ChatVideo from '$lib/components/chat/common/ChatVideo.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte';
 	import EditPencil from '$lib/components/icons/EditPencil.svelte';
@@ -38,6 +39,23 @@
 							class="relative size-6 shrink-0 overflow-hidden rounded-lg border border-gray-100/60 bg-white/60 dark:border-white/[0.06] dark:bg-white/[0.025]"
 						>
 							<Image src={fileUrl} alt="" imageClassName="size-full object-cover" />
+							{#if file.status === 'uploading'}
+								<div
+									class="absolute inset-0 flex items-center justify-center bg-white/75 text-gray-500 backdrop-blur-[1px] dark:bg-gray-950/70 dark:text-gray-300"
+								>
+									<Spinner className="size-3" />
+								</div>
+							{/if}
+						</div>
+					{:else if file.type === 'video' || (file?.content_type ?? '').startsWith('video/')}
+						<div
+							class="relative size-6 shrink-0 overflow-hidden rounded-lg border border-gray-100/60 bg-white/60 dark:border-white/[0.06] dark:bg-white/[0.025]"
+						>
+							<ChatVideo
+								file={file}
+								className="size-full object-cover"
+								preload="metadata"
+							/>
 							{#if file.status === 'uploading'}
 								<div
 									class="absolute inset-0 flex items-center justify-center bg-white/75 text-gray-500 backdrop-blur-[1px] dark:bg-gray-950/70 dark:text-gray-300"
